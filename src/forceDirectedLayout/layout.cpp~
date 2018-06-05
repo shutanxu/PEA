@@ -1,0 +1,141 @@
+#include"layout.h"
+
+using namespace std;
+
+Layout::Layout(vector<Vertex>& v, vector<Link>& l){
+    verVec.clear();
+    for( size_t i=0; i<v.size(); i++ ){
+        verVec.push_back(v[i]);
+    }
+    linkVec.clear();
+    for( size_t i=0; i<l.size(); i++ ){
+        linkVec.push_back(l[i]);
+    }
+
+    frameWidth=10;
+    frameLength=10;
+    area=frameWidth*frameLength;
+    K=sqrt(area/(float)verVec.size());
+    max_iteration=1000;
+
+    //map link to nodes
+    for( size_t i=0; i<linkVec.size(); i++ ){
+        Link e=linkVec[i];
+//        cout<<"source:"<<e.get_source_id()<<" dest:"<<e.get_target_id()<<endl;
+        linkVec[i].set_source( find_vertex(e.get_source_id()) );
+        linkVec[i].set_target( find_vertex(e.get_target_id()) );
+    }
+}
+
+// Method for finding a node by id.
+// @param string id
+// @param Node** node
+// @return bool
+Vertex* Layout::find_vertex(string id){
+    for(int i=0; i<verVec.size(); i++){
+//        cout<<verVec.at(i).get_id()<<endl;
+        if(verVec.at(i).get_id() == id){
+            return &(verVec[i]);
+        }
+    }
+    cerr<<"can not find: "<<id<<endl;
+}
+
+
+float
+Layout::fa( const float& x, const float& k ){
+    return x*x/k;
+}
+
+float
+Layout::fr( const float& x, const float& k ){
+    return k*k/x;
+}
+
+// Method for performing the force directed layout.
+// the algorithm by Fruchterman and Reingold
+// @return bool
+bool Layout::layout(){
+    int     it=0;
+    bool    flag=true;
+    while( it<max_iteration && flag ){
+        it++;
+	if(it%10==0){
+            cout<<"\xd"<<it<<"\t"<<max_iteration;
+	}
+//        cout<<it<<endl;
+        flag=true;
+        //each vertex has two vectors: .pos and .disp
+        for( size_t i=0; i<verVec.size(); i++ ){
+            verVec[i].set_disp(0,0,0);
+            for( size_t j=0; j<verVec.size(); j++ ){
+                if( i != j ){
+                    Coord   delta=(verVec[i].get_pos()-verVec[j].get_pos());
+                    float   delta_abs=delta.get_dis();
+                    Coord   disp=verVec[i].get_disp()+(delta/delta_abs)*fr(delta_abs, K);
+                    verVec[i].set_disp(disp);
+                }
+            }
+        }
+
+        // calculate attractive forces
+        for( size_t i=0; i<linkVec.size(); i++ ){
+            //each edges is an ordered pair of vertices .vand.u
+            Coord   delta = linkVec[i].get_source()->get_pos()-linkVec[i].get_target()->get_pos();
+            float   delta_abs=delta.get_dis();
+            Coord   v=linkVec[i].get_source()->get_disp()-(delta/delta_abs)*fa(delta_abs,K);
+            Coord   y=linkVec[i].get_target()->get_disp()+(delta/delta_abs)*fa(delta_abs,K);
+            linkVec[i].set_source_disp(v);
+            linkVec[i].set_target_disp(y);
+        }
+        //limit max displacement to temperature t and prevent from displacement outside frame
+        for(size_t i=0; i<verVec.size(); i++){
+            Coord   disp=verVec[i].get_disp();
+            Coord   c=verVec[i].get_pos()+(disp/disp.get_dis());//*min(verVec[i].get_disp(),temperature);
+            verVec[i].set_pos(c);
+            if( disp.get_dis()/float(linkVec.size()) > 1.0 || it <100 ){
+//                cout<<"disp:"<<disp.get_dis()/float(verVec.size())<<endl;
+                flag=true;
+            }
+        }
+    }
+
+    normalScale();
+//    print_all_vertex();
+
+}
+
+void
+Layout::print_all_vertex(){
+    for( size_t i=0; i<verVec.size(); i++ ){
+        cout.width(5);
+        cout<<left<<i+1;
+        Coord c=verVec[i].get_pos();
+        cout.width(10);
+        cout<<left<<c.x;
+        cout.width(10);
+        cout<<left<<c.y;
+        cout.width(10);
+        cout<<left<<c.z<<endl;
+    }
+}
+
+void
+Layout::normalScale(){
+    Coord   sum(0,0,0);
+    float   maxDis=-10e10;
+    for(size_t i=0; i<verVec.size()-1; i++){
+        sum=sum+verVec[i].get_pos();
+        for( size_t j=i+1; j<verVec.size(); j++ ){
+            float dis=verVec[i].get_pos().distTo(verVec[j].get_pos());
+            maxDis = maxDis > dis ? maxDis : dis;
+        }
+    }
+    if( maxDis != 0 ){
+        Coord   center = sum/(float)verVec.size();
+        for( size_t i=0; i<verVec.size(); i++ ){
+            Coord newC = (verVec[i].get_pos()-center)/(2*maxDis);
+            verVec[i].set_pos(newC);
+        }
+    }
+}

@@ -1,0 +1,4 @@
+#generate ssh key for github
+ssh-keygen -t rsa -C "xushutan@gmail.com"
+
+#copy content of xushutan.pub to github server to generate new key
